@@ -1,0 +1,214 @@
+<?php
+
+function druxly_node_menu() {
+	$items['druxly/node/add'] = array(
+		'title' => 'Create a new node',
+		'description' => 'Create a new node',
+		'page callback' => 'druxly_node_add',
+		'access callback' => TRUE,
+	);
+	$items['druxly/node/save/%node'] = array(
+		'title' => 'Edit a node',
+		'description' => 'Edit a node with $_POST and path',
+		'page callback' => 'druxly_node_save',
+		'page arguments' => array(3),
+		'access callback' => TRUE,
+	);
+	$items['druxly/post_prep'] = array(
+		'title' => 'Prep $_POST',
+		'description' => 'Prep $_POST for $params formatting',
+		'page callback' => 'druxly_post_prep',
+		'access callback' => TRUE,
+	);
+	$items['druxly/field/%node/%/%/%'] = array(
+		'title' => 'Update Single Field',
+		'description' => 'Update a single field for a node without using $_POST',
+		'page callback' => 'druxly_field_save',
+		'page arguments' => array(2,3,4,5),
+		'access callback' => TRUE,
+	);
+	
+	
+	return $items;
+}
+	
+
+ /**
+ * Saves an already existing node
+ * 
+ * @param string $node_type sets the node type of the node being created
+ * @param array $params An array of node data formatted as such:
+ * 	array(
+ * 		title => titleval,
+ * 		uid   => uidval,
+ * 		[und][#][key] => array(
+ * 			fieldname => field value or array(val1,val2)
+ * 		}
+ * 		...
+ * )
+ * @return BOOL save success or failure
+ */
+function druxly_node_save($node, $params = NULL, $destination = NULL){
+	if(is_array($param)) {
+		$param_ready = $param;
+	} elseif(!empty($_POST)) {
+		$param_ready = druxly_post_prep($_POST);
+	} else {
+		die;
+	}
+	$n = 0;
+	global $user;
+	foreach($param_ready as $key => $type){
+		if($key == 'title' || $key == 'uid'){
+			$node->$key = $type;
+			continue;
+		}
+		foreach($type as $field => $value){
+			if(is_array($value)){
+				foreach($value as $v){
+					$tempnode = &$node->$field;
+					$tempnode['und'][$n++][$key] = $v;
+				}
+			} else {
+				$tempnode = &$node->$field;
+				$tempnode['und'][0][$key] = $value;
+			}
+		}
+	}
+	
+	
+	$node = node_submit($node);
+	node_save($node);
+	
+	if(!is_null($destination)) {
+		drupal_goto($destination);
+	}
+}
+
+
+/**
+ * Saves a new node
+ * 
+ * @param string $node_type bundle type: article, page, etc.
+ * @param array $params An array of node data formatted as such:
+ *  * 	array(
+ * 		title => titleval,
+ * 		uid   => uidval,
+ * 		[und][#][key] => array(
+ * 			fieldname => field value or array(val1,val2)
+ * 		}
+ * 		...
+ * )
+ * @return BOOL save success or failure
+ */
+function druxly_node_add($node_type, $params = 'null', $destination = NULL){
+	if(!empty($_POST)) {
+		$param_ready = druxly_post_prep($_POST);
+	} else {
+		die;
+	}
+	$n = 0;
+	$node = new stdClass(); // We create a new node object
+	$node->type = $node_type; // Or any other content type you want
+	$node->language = LANGUAGE_NONE; // Or any language code if Locale module is enabled. More on this below *
+	node_object_prepare($node); // Set some default values.
+	
+	foreach($params as $key => $type){
+		if($key == 'title' || $key == 'uid'){
+			$node->$key = $type;
+			continue;
+		}
+		foreach($type as $field => $value){
+			if(is_array($value)){
+				foreach($value as $v){
+					$tempnode = &$node->$field;
+					$tempnode['und'][$n++][$key] = $v;
+				}
+			} else {
+				$tempnode = &$node->$field;
+				$tempnode['und'][0][$key] = $value;
+			}
+		}
+	}
+
+	$node = node_submit($node);
+	node_save($node);
+	
+	if(!is_null($destination)) {
+		drupal_goto($destination);
+	}
+}
+
+
+function druxly_post_prep() {
+		
+	if(empty($_POST)) {
+		$output = 'This is the form method for sending $_POST data to the druxly_node_save function.';
+		$output .= '
+			<form action="' . base_path() . 'druxly/post_prep" method="post">
+				<input class="form-control" placeholder="title" value="My Title" type="text" name="title" required />
+				<input class="form-control" placeholder="uid"  value="1" type="text" name="uid" />
+				<input class="form-control" placeholder="value[field_a]" value="value[field_a]" type="text" name="value[field_a]" />
+				<input class="form-control" placeholder="value[field_b][]" value="value[field_b][]"  type="text" name="value[field_b][]" />
+				<input class="form-control" placeholder="value[field_b][]" value="value[field_b][]"  type="text" name="value[field_b][]" />
+				<input class="form-control" placeholder="target_id[field_c]" value="target_id[field_c]"  type="text" name="target_id[field_c]" />
+				<input class="btn btn-lg btn-default" type="submit" value="GO"  />
+			</form>
+		';
+		$output .= '
+		<h4>Format the form with the names="" as used below to prep your node save properly</h4>
+<pre><code>
+&lt;form action="' . base_path() . 'druxly/post_prep" method="post"&gt;
+  &lt;input class="form-control" placeholder="title" value="My Title" type="text" name="title" required /&gt;
+  &lt;input class="form-control" placeholder="uid"  value="1" type="text" name="uid" /&gt;
+  &lt;input class="form-control" placeholder="value[field_a]" value="value[field_a]" type="text" name="value[field_a]" /&gt;
+  &lt;input class="form-control" placeholder="value[field_b][]" value="value[field_b][]"  type="text" name="value[field_b][]" /&gt;
+  &lt;input class="form-control" placeholder="value[field_b][]" value="value[field_b][]"  type="text" name="value[field_b][]" /&gt;
+  &lt;input class="form-control" placeholder="target_id[field_c]" value="target_id[field_c]"  type="text" name="target_id[field_c]" /&gt;
+  &lt;input class="btn btn-lg btn-default" type="submit" value="GO"  /&gt;
+&lt;/form&gt;
+</code></pre>
+		';
+
+	} else {
+		$param = array();
+		foreach ($_POST as $key => $value) {
+			$param[$key] = $value;
+		}
+		var_dump($param);
+		$output = 'Processed';
+	}
+	return $output;
+}
+
+/**
+ * Saves field for an already existing node
+ * 
+ * @param integer or object $node. The object to be act upon.
+ * @param string $field. Example: field_my_cool_field
+ * @param mixed $data. The value to be saved. Example: '123, 'hello world', etc.
+ * @param mixed $value_type. The end of the array. Defaults to 'value', can be 'tid' etc.
+ *  * 	
+ */
+
+function druxly_field_save($node, $field, $data, $value_type = 'value') {
+	if(is_numeric($node)) {
+		$node = node_load($node);
+	} 
+	
+	if($field == 'title') {
+		$node->title = $data;
+	} elseif($field == 'uid') {
+		$node->uid = $data;
+	} else {
+		$tempnode = &$node->$field;
+		$tempnode['und'][0][$value_type] = $data;
+	}
+
+	$node = node_submit($node);
+	return node_save($node);
+}
+
+
+
+

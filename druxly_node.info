@@ -1,0 +1,5 @@
+name = Druxly Node
+description = Make shorthand functions for node CRUD
+core = 7.x
+package = Druxly
+files[] = druxly_node.module
